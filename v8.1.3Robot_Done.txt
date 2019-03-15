@@ -1,0 +1,2052 @@
+#include<glut.h>
+#include<stdio.h>
+#include<Windows.h>
+#include<math.h>
+# define PI 3.1415926
+/*
+v1黄色人物模型
+v2有重力的人物模型
+v3超人变身
+v4空中物块可以踩顶
+v5完善周围重力判定
+v6超人技能完善
+v7超人的镜头缩放
+v8推箱子及特效已完成
+*/
+
+int thunderColor = 1;//雷霆变色计数器
+int thunderJump = 0;
+int lazerEyeTime = 0;
+int shield = 0;
+
+int walkTime = 100;
+double tempWalk;
+
+double R = 20;
+double R2 = 2.5;
+int n = 6;//六边形
+int n2 = 100;//圆圈
+
+bool superEye = false;//超级眼
+//以上为雷霆跳的特效全局变量
+
+bool landed = true;
+
+int robotIdentity = 1;
+//robotIdentity，1为普通人，2为超人
+
+double robotX = 0;
+double robotY = 0;
+double robotZ = 0;
+
+double v_robot = 0;
+double v_robotY = 0;
+double v_robotX = 0;
+double v_robotZ = 0;
+double gravity = 9.8;//重力加速度
+
+double powerBallX = 0;
+double powerBallY = 0;
+double powerBallZ = 0;
+double v_powerBallX = 0;
+double v_powerBallY = 0;
+int powerBallExist = 0;
+
+double powerBallX2 = 0;
+double powerBallY2 = 0;
+double powerBallZ2 = 0;
+double v_powerBallX2 = 0;
+double v_powerBallY2 = 0;
+int powerBallExist2 = 0;//最多两个能量球
+
+int numPowerBall = 1;
+
+
+double cameraX=100;
+double cameraY=45;
+double cameraZ=16;
+double lookAimX = 55;
+double lookAimY = 0;//这个高度不变
+double lookAimZ = 3;
+
+double v_flagY = 0;
+double flagX = 0;
+double flagY = 0;
+double flagZ = 0;
+int flagOnAir = 0;
+
+int weatherChoose = 1;// 1是太阳，2是月亮
+
+double theta = 0;//并不是角度制,本来以为没有用结果用上了，sin和cos的一圈是 6.28 rads
+int flag = 0;
+//------------------------------
+//这里面是建筑群，高楼长20，宽20，每层高5
+double building1X = -70;
+double building1Z = -10;
+double building1Floor = 10;
+
+double building2X = -70;
+double building2Z = -35;
+double building2Floor = 48;
+
+double building3X = -70;
+double building3Z = -60;
+double building3Floor = 103;
+
+double building4X = -70;
+double building4Z = -85;
+double building4Floor = 16;
+
+double building5X = -45;
+double building5Z = -20;
+double building5Floor = 3;
+
+double building6X = -45;
+double building6Z = -80;
+double building6Floor = 2;
+
+double building7X = -45;
+double building7Z = -50;
+double building7Floor = 3;
+//------------------------------
+double boxX = -50;
+double boxY = 0;
+double boxZ = 50;
+double v_boxX = 0;
+double v_boxY = 0;
+double v_boxZ = 0;
+double boxH = 36;
+int boxPushX = 0;//是否在X方向上移动
+int boxIn = 0;//是否将箱子推到了指定的方框里
+int boxWasAttacked = 0;
+
+
+
+//用到的函数一览↓
+void redFlag(double X, double Y, double Z);
+void Done_Robot(double firstX, double firstY, double firstZ, int identity, bool onLand);
+void powerBall(double ballX, double ballY, double ballZ);
+void powerBall2(double ballX, double ballY, double ballZ);
+void buildingBuild(double BX, double BZ, int floorN);
+void box(double x, double y, double z, double h, int inRect);
+void menu1();
+void menu2();
+void init();
+void reshape(int w, int h);
+void changFangTiInDisplay
+(
+	double upy, double up1x, double up1z, double up2x, double up2z, double up3x, double up3z, double up4x, double up4z,
+	double downy, double down1x, double down1z, double down2x, double down2z, double down3x, double down3z, double down4x, double down4z,
+	double R, double G, double B, double ALPHA
+);
+void display();
+void spinCube();
+void mouse(int btn, int state, int x, int y);
+void mykeyboard(unsigned char key, int x, int y);
+//用到的函数一览↑
+
+
+
+
+void redFlag(double X, double Y, double Z)
+{
+	glColor3f(1, 0.12, 0);
+	glBegin(GL_POLYGON);
+	glVertex3f(X, Y, Z);
+	glVertex3f(X, Y+1, Z-20);
+	glVertex3f(X, Y+15, Z);
+	glEnd();
+
+}
+
+//Done_Robot写的不完美，里面的参数使用错乱不堪
+void Done_Robot(double firstX, double firstY, double firstZ, int identity, bool onLand)
+{
+	// 阴影，用来确定超人的位置, 阴影崩了，直接换个锁定位置吧
+	if (firstX<=100 && firstX>=-100 && firstZ<=100 && firstZ>=-100)
+	{
+		glVertex4f(0.1, 0.1, 0.1, 0.1);
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(firstX + R2*cos(2 * PI*i / n2), 1, firstZ + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX>100||firstX<-100)&&(firstZ>100||firstZ<-100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(((firstX>100)?100:-100) + R2*cos(2 * PI*i / n2), 1, ((firstZ>100)?100:-100) + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX > 100 || firstX < -100) && (firstZ <= 100 && firstZ >= -100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(((firstX>100) ? 100 : -100) + R2*cos(2 * PI*i / n2), 1, firstZ + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX <= 100 && firstX >= -100) && (firstZ > 100 || firstZ < -100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(firstX + R2*cos(2 * PI*i / n2), 1, ((firstZ>100) ? 100 : -100) + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+
+
+	//下面这个是人类模式
+	if (identity == 1)
+	{
+		//这个人身高60像素
+		//头↓
+		glColor3f(1, 0.647, 0.31);
+		glPushMatrix();
+		glTranslatef(robotX, robotY + 50, robotZ);
+		glutWireSphere(10, 30, 30);
+		glPopMatrix();
+
+
+		//身体↓
+		changFangTiInDisplay(robotY + 40, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+			robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0.271, 0.545, 0.455, 1);
+
+		if (onLand)
+		{
+			//左胳膊
+			changFangTiInDisplay(robotY + 40, robotX + 5, robotZ + 15, robotX - 5, robotZ + 15, robotX - 5, robotZ + 11, robotX + 5, robotZ + 11,
+				robotY + 22, robotX + 5, robotZ + 15, robotX - 5, robotZ + 15, robotX - 5, robotZ + 11, robotX + 5, robotZ + 11, 0.271, 0.545, 0.455, 1);
+
+			//右胳膊
+			changFangTiInDisplay(robotY + 40, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11,
+				robotY + 22, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11, 0.271, 0.545, 0.455, 1);
+		}
+		else
+		{
+			//左胳膊飞天
+			changFangTiInDisplay(robotY + 40, robotX + 4, robotZ + 31, robotX - 5, robotZ + 31, robotX - 5, robotZ + 11, robotX + 4, robotZ + 11,
+				robotY + 33, robotX + 4, robotZ + 31, robotX - 5, robotZ + 31, robotX - 5, robotZ + 11, robotX + 4, robotZ + 11, 0.271, 0.545, 0.455, 1);
+
+			//右胳膊飞天
+			changFangTiInDisplay(robotY + 40, robotX + 4, robotZ - 31, robotX - 5, robotZ - 31, robotX - 5, robotZ - 11, robotX + 4, robotZ - 11,
+				robotY + 33, robotX + 4, robotZ - 31, robotX - 5, robotZ - 31, robotX - 5, robotZ - 11, robotX + 4, robotZ - 11, 0.271, 0.545, 0.455, 1);
+		}
+
+		//下面是人类的动腿系统，超人的腿不会动
+		//人类动腿机制
+		/*
+		200-150  o->
+		150-100  o<-
+		100- 50  <-o
+		 50-  0  ->o
+		
+		*/
+		if ((v_robotX > 0.1 || v_robotX < -0.1 || v_robotZ < -0.1 || v_robotZ>0.1)&& landed )//人类在陆地上走路才会动腿，否则腿是不会动的
+		{
+			if (walkTime > 75)
+			{
+				tempWalk = 2 * walkTime - 150;
+				//左腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					                 robotY + 2, robotX +(5-tempWalk/10)+ 5, robotZ + 10, robotX +(5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1, 0.31, 0.58, 0.804, 1);
+
+				//左脚
+				changFangTiInDisplay(robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1,
+					                 robotY,     robotX + (5 - tempWalk / 10) + 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0, 1);
+
+				//右腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					                 robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10, 0.31, 0.58, 0.804, 1);
+				//右脚
+				changFangTiInDisplay(robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10,
+					                 robotY,     robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0, 1);
+
+			}
+			else if (walkTime <= 75 && walkTime > 50)
+			{
+				tempWalk = 2 * walkTime - 100;
+				//左腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					                 robotY + 2, robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1, 0.31, 0.58, 0.804, 1);
+
+				//左脚
+				changFangTiInDisplay(robotY + 2, robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1,
+					                 robotY,     robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1, 0, 0, 0, 1);
+
+				//右腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					robotY + 2, robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10, 0.31, 0.58, 0.804, 1);
+				//右脚
+				changFangTiInDisplay(robotY + 2, robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10,
+					                 robotY,     robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10, 0, 0, 0, 1);
+
+			}
+			else if (walkTime <= 50 && walkTime > 25)
+			{
+				tempWalk = 2 * walkTime - 50;
+				//左腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					                 robotY + 2,  robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1, 0.31, 0.58, 0.804, 1);
+
+				//左脚
+				changFangTiInDisplay(robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1,
+					                 robotY,     robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0, 1);
+
+				//右腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					                 robotY + 2,  robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10, 0.31, 0.58, 0.804, 1);
+				//右脚
+				changFangTiInDisplay(robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10,
+					                 robotY,     robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0, 1);
+
+			}
+			else if (walkTime <= 25)
+			{
+				tempWalk = 2 * walkTime;
+				//左腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					                 robotY + 2,  robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1, 0.31, 0.58, 0.804, 1);
+
+				//左脚
+				changFangTiInDisplay(robotY + 2, robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1,
+					                 robotY,     robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1, 0, 0, 0, 1);
+
+				//右腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					                 robotY + 2,  robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10, 0.31, 0.58, 0.804, 1);
+				//右脚
+				changFangTiInDisplay(robotY + 2, robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10,
+					                 robotY,     robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10, 0, 0, 0, 1);
+
+			}
+		} 
+		else //人类的非陆地走路状态，腿是垂直向下的
+		{
+			//左腿
+			changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+				robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0.31, 0.58, 0.804, 1);
+
+			//左脚
+			changFangTiInDisplay(robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+				robotY, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0, 0, 0, 1);
+
+			//右腿
+			changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+				robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0.31, 0.58, 0.804, 1);
+			//右脚
+			changFangTiInDisplay(robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+				robotY, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0, 1);
+		}
+	}
+	//下面这个是超人模式
+	else if (identity == 2)
+	{
+		//这个人身高60像素
+		//头↓
+		glColor3f(1, 0.714, 0.757);
+		glPushMatrix();
+		glTranslatef(robotX, robotY + 50, robotZ);
+		glutWireSphere(10, 40, 40);
+		glPopMatrix();
+
+		//身体↓
+		changFangTiInDisplay(robotY + 40, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+							 robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0.502, 1);
+
+		if (onLand)
+		{
+			//左胳膊
+			changFangTiInDisplay(robotY + 40, robotX + 5, robotZ + 15, robotX - 5, robotZ + 15, robotX - 5, robotZ + 11, robotX + 5, robotZ + 11,
+				                 robotY + 22, robotX + 5, robotZ + 15, robotX - 5, robotZ + 15, robotX - 5, robotZ + 11, robotX + 5, robotZ + 11, 0, 0, 0.502, 1);
+
+			//右胳膊
+			changFangTiInDisplay(robotY + 40, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11,
+				                 robotY + 22, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11, 0, 0, 0.502, 1);
+
+			if (v_robotX > 0.1 || v_robotX < -0.1 || v_robotZ < -0.1 || v_robotZ>0.1)
+			{
+				if (walkTime > 75)
+				{
+					tempWalk = 2 * walkTime - 150;
+					//左腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+						robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+					//左脚
+					changFangTiInDisplay(robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1,
+						robotY, robotX + (5 - tempWalk / 10) + 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 10, robotX + (5 - tempWalk / 10) - 5, robotZ + 1, robotX + (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0, 1);
+
+					//右腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+						robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0.804, 1);
+					//右脚
+					changFangTiInDisplay(robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10,
+						robotY, robotX - (5 - tempWalk / 10) + 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 1, robotX - (5 - tempWalk / 10) - 5, robotZ - 10, robotX - (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0, 1);
+
+				}
+				else if (walkTime <= 75 && walkTime > 50)
+				{
+					tempWalk = 2 * walkTime - 100;
+					//左腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+						robotY + 2, robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+					//左脚
+					changFangTiInDisplay(robotY + 2, robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1,
+						robotY, robotX + tempWalk / 10 + 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 10, robotX + tempWalk / 10 - 5, robotZ + 1, robotX + tempWalk / 10 + 5, robotZ + 1, 0, 0, 0, 1);
+
+					//右腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+						robotY + 2, robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10, 0, 0, 0.804, 1);
+					//右脚
+					changFangTiInDisplay(robotY + 2, robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10,
+						robotY, robotX - tempWalk / 10 + 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 1, robotX - tempWalk / 10 - 5, robotZ - 10, robotX - tempWalk / 10 + 5, robotZ - 10, 0, 0, 0, 1);
+
+				}
+				else if (walkTime <= 50 && walkTime > 25)
+				{
+					tempWalk = 2 * walkTime - 50;
+					//左腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+						robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+					//左脚
+					changFangTiInDisplay(robotY + 2, robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1,
+						robotY, robotX - (5 - tempWalk / 10) + 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 10, robotX - (5 - tempWalk / 10) - 5, robotZ + 1, robotX - (5 - tempWalk / 10) + 5, robotZ + 1, 0, 0, 0, 1);
+
+					//右腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+						robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0.804, 1);
+					//右脚
+					changFangTiInDisplay(robotY + 2, robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10,
+						robotY, robotX + (5 - tempWalk / 10) + 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 1, robotX + (5 - tempWalk / 10) - 5, robotZ - 10, robotX + (5 - tempWalk / 10) + 5, robotZ - 10, 0, 0, 0, 1);
+
+				}
+				else if (walkTime <= 25)
+				{
+					tempWalk = 2 * walkTime;
+					//左腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+						robotY + 2, robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+					//左脚
+					changFangTiInDisplay(robotY + 2, robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1,
+						robotY, robotX - 0.1 * tempWalk + 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 10, robotX - 0.1 * tempWalk - 5, robotZ + 1, robotX - 0.1 * tempWalk + 5, robotZ + 1, 0, 0, 0, 1);
+
+					//右腿
+					changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+						robotY + 2, robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10, 0, 0, 0.804, 1);
+					//右脚
+					changFangTiInDisplay(robotY + 2, robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10,
+						robotY, robotX + 0.1 * tempWalk + 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 1, robotX + 0.1 * tempWalk - 5, robotZ - 10, robotX + 0.1 * tempWalk + 5, robotZ - 10, 0, 0, 0, 1);
+
+				}
+			}
+			else
+			{
+				//左腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+				//左脚
+				changFangTiInDisplay(robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+					robotY, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0, 0, 0, 1);
+
+				//右腿
+				changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0.804, 1);
+				//右脚
+				changFangTiInDisplay(robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+					robotY, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0, 1);
+			}
+		}
+		else
+		{
+			//左胳膊
+			changFangTiInDisplay(robotY + 55, robotX + 4, robotZ + 15, robotX - 3, robotZ + 15, robotX - 3, robotZ + 11, robotX + 4, robotZ + 11,
+				robotY + 30, robotX + 4, robotZ + 15, robotX - 3, robotZ + 15, robotX - 3, robotZ + 11, robotX + 4, robotZ + 11, 0, 0, 0.502, 1);
+
+			//右胳膊
+			changFangTiInDisplay(robotY + 40, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11,
+				robotY + 22, robotX + 5, robotZ - 15, robotX - 5, robotZ - 15, robotX - 5, robotZ - 11, robotX + 5, robotZ - 11, 0, 0, 0.502, 1);
+
+
+			//左腿
+			changFangTiInDisplay(robotY + 20, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+				robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0, 0, 0.804, 1);
+
+			//左脚
+			changFangTiInDisplay(robotY + 2, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1,
+				robotY, robotX + 5, robotZ + 10, robotX - 5, robotZ + 10, robotX - 5, robotZ + 1, robotX + 5, robotZ + 1, 0, 0, 0, 1);
+
+			//右腿
+			changFangTiInDisplay(robotY + 20, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+				robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0.804, 1);
+			//右脚
+			changFangTiInDisplay(robotY + 2, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10,
+				robotY, robotX + 5, robotZ - 1, robotX - 5, robotZ - 1, robotX - 5, robotZ - 10, robotX + 5, robotZ - 10, 0, 0, 0, 1);
+		}
+		//露出白衬衣
+		glColor3f(1, 1, 1);
+		glBegin(GL_POLYGON);
+		glVertex3f(robotX + 6, robotY+40, robotZ+4);
+		glVertex3f(robotX + 6, robotY+40, robotZ-4);
+		glVertex3f(robotX + 6, robotY+25, robotZ);
+		glEnd();
+
+		//胸前红色S
+		glLineWidth(2.5);
+		glColor3f(1, 0, 0);
+		glBegin(GL_LINES);
+		glVertex3f(robotX + 7, robotY + 40, robotZ);
+		glVertex3f(robotX + 7, robotY + 38, robotZ-3);
+
+		glVertex3f(robotX + 7, robotY + 40, robotZ);
+		glVertex3f(robotX + 7, robotY + 38, robotZ + 3);
+
+		glVertex3f(robotX + 7, robotY + 38, robotZ + 3);
+		glVertex3f(robotX + 7, robotY + 35, robotZ - 3);
+
+		glVertex3f(robotX + 7, robotY + 35, robotZ - 3);
+		glVertex3f(robotX + 7, robotY + 33, robotZ);
+
+		glVertex3f(robotX + 7, robotY + 33, robotZ);
+		glVertex3f(robotX + 7, robotY + 35, robotZ + 3);
+
+		glEnd();
+		glLineWidth(1.0);
+
+		//红色披风
+		glColor3f(1, 0, 0);
+		glBegin(GL_POLYGON);
+		glVertex3f(robotX - 6, robotY + 40, robotZ+13);
+		glVertex3f(robotX - 6, robotY + 40, robotZ-13);
+		glVertex3f(robotX - 6, robotY + 5, robotZ-18);
+		glVertex3f(robotX - 6, robotY + 5, robotZ+18);
+		glEnd();
+
+	}
+	
+}
+
+void powerBall(double ballX, double ballY, double ballZ)
+{
+	ballY = ballY + 5;
+	ballX = ballX - 20;
+	glBegin(GL_LINES);
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 9, ballY +30 + 10, ballZ + 2);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 10, ballY + 30 - 11, ballZ - 15);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 15, ballY + 30 + 8 , ballZ - 10);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 12, ballY + 30 + 10, ballZ + 13);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 15, ballY + 30 - 15, ballZ + 14);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 13, ballY + 30 + 15, ballZ - 9);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 7, ballY + 30 + 9, ballZ - 14);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 8, ballY + 30 + 10, ballZ + 8);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 9, ballY + 30 - 13, ballZ + 13);
+	glEnd();
+	glPushMatrix();
+	glTranslatef(ballX+30, ballY + 30, ballZ);
+	//glColor3f(0.9, 0.9, 0.6);
+	glutWireSphere(5, 30, 30);
+	glColor3f(0.5, 0, 1);
+	glutWireSphere(6, 10, 10);
+	glColor3f(0.1, 0.1, 1);
+	glutWireSphere(7, 20, 10);
+	glColor3f(0.602, 0, 0.1);
+	glutWireSphere(11, 10, 10);
+	glPopMatrix();
+}
+void powerBall2(double ballX, double ballY, double ballZ)
+{
+	ballY = ballY + 5;
+	ballX = ballX - 20;
+	glBegin(GL_LINES);
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 9, ballY + 30 + 10, ballZ + 2);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 10, ballY + 30 - 11, ballZ - 15);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 15, ballY + 30 + 8, ballZ - 10);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 12, ballY + 30 + 10, ballZ + 13);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 15, ballY + 30 - 15, ballZ + 14);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 13, ballY + 30 + 15, ballZ - 9);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 - 7, ballY + 30 + 9, ballZ - 14);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 8, ballY + 30 + 10, ballZ + 8);
+
+	glVertex3f(ballX + 30, ballY + 30, ballZ);
+	glVertex3f(ballX + 30 + 9, ballY + 30 - 13, ballZ + 13);
+	glEnd();
+	glPushMatrix();
+	glTranslatef(ballX + 30, ballY + 30, ballZ);
+	//glColor3f(0.9, 0.9, 0.6);
+	glutWireSphere(5, 30, 30);
+	glColor3f(0.5, 0, 1);
+	glutWireSphere(6, 10, 10);
+	glColor3f(0.1, 0.1, 1);
+	glutWireSphere(7, 20, 10);
+	glColor3f(0.602, 0, 0.1);
+	glutWireSphere(11, 10, 10);
+	glPopMatrix();
+}
+
+void buildingBuild(double BX, double BZ, int floorN)
+{
+	double tempY=0;
+	for (; floorN > 0; floorN--)
+	{
+		changFangTiInDisplay(tempY + 5, BX + 10, BZ + 10, BX + 10, BZ - 10, BX - 10, BZ - 10, BX - 10, BZ + 10,
+			tempY, BX + 10, BZ + 10, BX + 10, BZ - 10, BX - 10, BZ - 10, BX - 10, BZ + 10, 0.753, 0.753, 0.753, 1);
+		tempY += 5;
+	}
+}
+
+void box(double x, double y, double z, double h, int inRect)
+{
+	if (boxWasAttacked > 0)
+	{
+		changFangTiInDisplay(y + h, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10,
+			y, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10, 1, 0, 0, 1);
+	}
+	else
+	{
+		if (inRect)
+			changFangTiInDisplay(y + h, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10,
+				y, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10, 1, 0.843, 0, 1);
+		else
+			changFangTiInDisplay(y + h, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10,
+				y, x + 10, z + 10, x + 10, z - 10, x - 10, z - 10, x - 10, z + 10, 0.545, 0.451, 0.333, 1);
+	}
+}
+
+void menu1()
+{
+	printf("你好，超人！欢迎回来！\n\n");
+	printf("你想开始游戏吗？\n\n");
+	printf("[1]是的\t\t\t[2]退出\n\n");
+	printf("请输入您的选项数字并确认：");
+}
+
+void menu2()
+{
+	printf("\n\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
+	printf("开始前请阅读操作说明：\n\n");
+	printf("下面介绍几个（共29个）简单的操作键：\n\n");
+	printf("qwe  QWE\n");
+	printf("asd  ASD  这几个键用来控制观察者的位置。\n\n");
+	printf("rty  RTY\n");
+	printf("fgh  FGH  这几个键用来控制被观察的位置。\n\n");
+	printf(" z 和 Z 是重置人物的位置。\n\n");
+	printf(" x 和 X 是升旗键，在主席台内可升旗。\n\n");
+	printf(" i    I\n");
+	printf("jkl  JKL  这几个键用来控制人物的水平移动。\n\n");
+	printf(" u 和 U 是跳跃键，在超人模式下是上升键，因为超人是不受重力影响的。\n\n");
+	printf(" o 和 O 是技能雷霆跳，开启此功能，可使人物的跳跃力大幅增强。\n\n");
+	printf(" p 和 P 是变身键，用来人类和超人身份之间的变身。\n\n");
+	printf(" n 和 N 是下降键，在超人模式下，可降低人物高度。\n\n");
+	printf(" m 和 M 是能量盾，在超人模式下，开启全身护盾。\n\n");
+	printf(" b 和 B 是透视眼，在超人模式下，可开启。\n\n");
+	printf(" v 和 V 是镭射眼，在超人模式下，可使用此技能。\n\n");
+	printf(" c 和 C 是能量波，在超人模式下，可使用此技能。\n\n");
+	printf("另外，还有鼠标的三个按键：左键是太阳天，右键是月亮天，滚轮键是有星星的夜。\n\n");
+	printf("[1]好的,开始吧\t\t\t[2]算了，谢谢\n\n");
+	printf("请输入你的选项数字并确认：");
+}
+
+void init()
+{
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	glEnable(GL_DEPTH_TEST);
+	glLineWidth(3);
+}
+
+void reshape(int w, int h)
+{
+	glViewport(0, 0, w, h);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	if (w <= h)
+		glOrtho(-200, 200, -200 * (GLfloat)h / (GLfloat)w, 200 * (GLfloat)h / (GLfloat)w, -600, 600);
+	else
+		glOrtho(200 * (GLfloat)h / (GLfloat)w, 200 * (GLfloat)h / (GLfloat)w, -200.0, 200.0, -600, 600);
+
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+void changFangTiInDisplay//自定义的长方体画法
+(
+	double upy,double up1x,double up1z,double up2x, double up2z,double up3x, double up3z, double up4x, double up4z,
+	double downy,double down1x, double down1z,double down2x,double down2z,double down3x,double down3z,double down4x,double down4z,
+	double R, double G, double B, double ALPHA
+)
+{
+	glColor4f(R, G, B, ALPHA);
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down1x, downy, down1z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down3x, downy, down3z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down1x, downy, down1z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(down1x, downy, down1z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	glVertex3f(down4x, downy, down4z);
+	glEnd();
+
+	glColor3f(1, 1, 1);
+	glLineWidth(1.0);
+	glBegin(GL_LINES);
+	// 1
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	//2
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(up3x, upy, up3z);
+	//3
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	//4
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(up1x, upy, up1z);
+	//5
+	glVertex3f(down1x, downy, down1z);
+	glVertex3f(down2x, downy, down2z);
+	//6
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	//7
+	glVertex3f(down3x, downy, down3z);
+	glVertex3f(down4x, downy, down4z);
+	//8
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down1x, downy, down1z);
+	//9
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(down1x, downy, down1z);
+	//10
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	//11
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(down3x, downy, down3z);
+	//12
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glEnd();
+}
+
+void display()
+{
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	//超人拥有主角镜头，而人类没有
+	if (robotIdentity==1)
+		gluLookAt(cameraX, cameraY, cameraZ, lookAimX, lookAimY, lookAimZ, 0, 1, 0);
+	else
+		gluLookAt(cameraX+0.9*robotX, cameraY+0.9*robotY+5*v_robot, cameraZ+0.9*robotZ+2*v_robot, 55+robotX, robotY, 3+robotZ, 0, 1, 0);
+
+	if (thunderJump > 0)//好了，魔法盘会旋转了
+	{
+		glBegin(GL_POLYGON);
+		for (int i = 0; i < n; i++)
+			glVertex3f(robotX + R*cos(-0.5*theta + i * 2 * PI / n), robotY + 1, robotZ + R*sin(-0.5*theta + i * 2 * PI / n));
+		glEnd();
+
+		glLineWidth(0.8);
+		glBegin(GL_LINE_LOOP);
+		for (int i = 0; i < n2; i++)
+			glVertex3f(robotX + R*cos(i * 2 * PI / n2), robotY + 1, robotZ + R*sin(i * 2 * PI / n2));
+		glEnd();
+	}
+
+	//能量球
+	if (powerBallExist>0)
+		powerBall(powerBallX, powerBallY, powerBallZ);
+	if (powerBallExist2 > 0)
+		powerBall2(powerBallX2, powerBallY2, powerBallZ2);
+	//第二个能量球不能闪烁，有点小瑕疵，我可以改的，但是我太懒了
+
+
+	if (shield > 0)
+	{
+		glColor3f(1, 1, 1);
+		glPushMatrix();
+		glTranslatef(robotX, robotY +30, robotZ);
+		glutWireSphere(30, 15, 15);
+		glPopMatrix();
+	}
+
+	if (lazerEyeTime > 0 && robotIdentity==2)  //超人才能用眼激光
+	{
+		glColor3f(1, 0.3, 0);
+		glLineWidth(3.0);
+		glBegin(GL_LINES);
+		glVertex3f(robotX + 9, robotY + 50, robotZ + 4);
+		glVertex3f(robotX + 800, robotY + 50, robotZ + 4);
+		glEnd();
+		glBegin(GL_LINES);
+		glVertex3f(robotX + 9, robotY + 50, robotZ - 4);
+		glVertex3f(robotX + 800, robotY + 50, robotZ -4);
+		glEnd();
+		glLineWidth(1.0);
+
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ + 4);
+		glColor3f(1, 0, 0);
+		glutWireSphere(10, 7, 7);
+		glPopMatrix();
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ - 4);
+		glColor3f(1, 0, 0);
+		glutWireSphere(10, 7, 7);
+		glPopMatrix();
+	}
+
+	//超级眼的眼光
+	if (superEye == true && robotIdentity == 2)
+	{
+		glEnable(GL_BLEND);  //开启混合模式
+		glDisable(GL_DEPTH_TEST);  //关闭深度测试
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);//这三个为透视模式
+		//上面是透视
+
+
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ + 4);
+		glColor3f(1, 0, 0);
+		glutWireSphere(1, 10, 10);
+		glColor3f(1, 1, 1);
+		glutWireSphere(10, 7, 7);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ - 4);
+		glColor3f(1, 0, 0);
+		glutWireSphere(1, 10, 10);
+		glColor3f(1, 1, 1);
+		glutWireSphere(10, 7, 7);
+		glPopMatrix();
+	}
+	else
+	{
+		glDisable(GL_BLEND);
+		glEnable(GL_DEPTH_TEST);
+		//上面是关闭透视特效
+
+
+		glColor3f(0.502, 0.502, 0);
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ + 4);
+		glutWireSphere(1, 10, 10);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 9, robotY + 50, robotZ - 4);
+		glutWireSphere(1, 10, 10);
+		glPopMatrix();
+	}
+
+
+	//下面是超人飞行时，脚底喷火
+	if (landed == false && robotIdentity == 2 && v_robotY > 0)
+	{
+		glLineWidth(3.0);
+		glBegin(GL_LINES);
+		glColor3f(1, 1, 1);
+		glVertex3f(robotX, robotY - 3, robotZ - 5.5);
+		glColor3f(0.388, 0.722, 1);
+		glVertex3f(robotX, robotY - 3 - v_robotY * 28, robotZ - 5.5);
+		//上面是右边
+		//下面是左边
+		glColor3f(1, 1, 1);
+		glVertex3f(robotX, robotY - 3, robotZ + 5.5);
+		glColor3f(0.388, 0.722, 1);
+		glVertex3f(robotX, robotY - 3 - v_robotY * 28, robotZ + 5.5);
+		glEnd();
+
+		glLineWidth(1.0);
+		glBegin(GL_LINES);
+		glColor3f(1, 1, 1);
+		glVertex3f(robotX, robotY, robotZ + 5.5);
+		glVertex3f(robotX, robotY - v_robotY * 35, robotZ + 5.5);
+		//-----------------------------------------------------
+		glColor3f(1, 1, 1);
+		glVertex3f(robotX, robotY, robotZ - 5.5);
+		glVertex3f(robotX, robotY - v_robotY * 35, robotZ - 5.5);
+		glEnd();
+
+		glLineWidth(2.0);
+		glBegin(GL_LINES);
+
+		glColor3f(1, 1, 1);//粉红火焰右腿
+		glVertex3f(robotX + 2, robotY - 4, robotZ - 5.5 + 2);
+		glColor3f(0.878, 0.4, 1);
+		glVertex3f(robotX + 2, robotY - 4 - v_robotY * 14, robotZ - 5.5 + 2);
+
+		glColor3f(1, 1, 1);//红色火焰右腿
+		glVertex3f(robotX + 2, robotY - 4, robotZ - 5.5 - 2);
+		glColor3f(1, 0.271, 0);
+		glVertex3f(robotX + 2, robotY - 4 - v_robotY * 14, robotZ - 5.5 - 2);
+
+		glColor3f(1, 1, 1);//粉红火焰右腿
+		glVertex3f(robotX - 2, robotY - 4, robotZ - 5.5 - 2);
+		glColor3f(0.878, 0.4, 1);
+		glVertex3f(robotX - 2, robotY - 4 - v_robotY * 14, robotZ - 5.5 - 2);
+
+		glColor3f(1, 1, 1);//红色火焰右腿
+		glVertex3f(robotX - 2, robotY - 4, robotZ - 5.5 + 2);
+		glColor3f(1, 0.271, 0);
+		glVertex3f(robotX - 2, robotY - 4 - v_robotY * 14, robotZ - 5.5 + 2);
+
+		//-----------------------------------------------------
+
+		glColor3f(1, 1, 1);//粉红火焰左腿
+		glVertex3f(robotX + 2, robotY - 4, robotZ + 5.5 + 2);
+		glColor3f(0.878, 0.4, 1);
+		glVertex3f(robotX + 2, robotY - 4 - v_robotY * 14, robotZ + 5.5 + 2);
+
+		glColor3f(1, 1, 1);//红色火焰左腿
+		glVertex3f(robotX + 2, robotY - 4, robotZ + 5.5 - 2);
+		glColor3f(1, 0.271, 0);
+		glVertex3f(robotX + 2, robotY - 4 - v_robotY * 14, robotZ + 5.5 - 2);
+
+		glColor3f(1, 1, 1);//粉红火焰左腿
+		glVertex3f(robotX - 2, robotY - 4, robotZ + 5.5 - 2);
+		glColor3f(0.878, 0.4, 1);
+		glVertex3f(robotX - 2, robotY - 4 - v_robotY * 14, robotZ + 5.5 - 2);
+
+		glColor3f(1, 1, 1);//红色火焰左腿
+		glVertex3f(robotX - 2, robotY - 4, robotZ + 5.5 + 2);
+		glColor3f(1, 0.271, 0);
+		glVertex3f(robotX - 2, robotY - 4 - v_robotY * 14, robotZ + 5.5 + 2);
+
+		glEnd();
+
+		glLineWidth(1.0);
+	}
+
+
+	//这里做冰火旋绕球
+	if (robotIdentity == 2)
+	{
+		//n=2, i=1 i=0
+		//火球
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta), robotY + 37, robotZ + 1.5*R*sin(theta));
+		glColor3f(1, 0.251, 0.251);
+		glutWireSphere(4, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(3, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta - 0.5) - 3 * v_robotX, robotY + 37 - 3 * v_robotY, robotZ + 1.5*R*sin(theta - 0.5) - 3 * v_robotZ);
+		glColor3f(1, 0.251, 0.251);
+		glutWireSphere(2, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(1, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta - 1) - 6 * v_robotX, robotY + 37 - 6 * v_robotY, robotZ + 1.5*R*sin(theta - 1) - 6 * v_robotZ);
+		glColor3f(1, 0.251, 0.251);
+		glutSolidSphere(1, 3, 3);
+		glPopMatrix();
+
+		//冰球
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta+PI), robotY + 37, robotZ + 1.5*R*sin(theta+PI));
+		glColor3f(0.686, 0.933, 0.933);
+		glutWireSphere(4, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(3, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta + PI - 0.5) - 3 * v_robotX, robotY + 37 - 3 * v_robotY, robotZ + 1.5*R*sin(theta + PI - 0.5) - 3 * v_robotZ);
+		glColor3f(0.686, 0.933, 0.933);
+		glutWireSphere(2, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(1, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 1.5*R*cos(theta + PI - 1) - 6 * v_robotX, robotY + 37 - 6 * v_robotY, robotZ + 1.5*R*sin(theta + PI - 1) - 6 * v_robotZ);
+		glColor3f(0.686, 0.933, 0.933);
+		glutSolidSphere(1, 3, 3);
+		glPopMatrix();
+
+	}
+
+
+
+
+	//----------------------------------------------------上面是特效
+	//----------------------------------------------------下面是背景
+
+	//下面是一个三维坐标系
+	glColor3f(1.0, 0.0, 0.0);//亮红色X轴
+	glBegin(GL_LINES);
+	glVertex3f(-200.0, 0.0, 0.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(200.0, 0.0, 0.0);
+	glEnd();
+
+	glColor3f(0.0, 1.0, 0.0);//亮绿色Y轴
+	glBegin(GL_LINES);
+	glVertex3f(0.0, -200.0, 0.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(0.0, 200.0, 0.0);
+	glEnd();
+
+	glColor3f(0.0, 0.0, 1.0);//亮蓝色Z轴
+	glBegin(GL_LINES);
+	glVertex3f(0.0, 0.0, -200.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(0.0, 0.0, 200.0);
+	glEnd();
+
+
+	//草坪围栏
+	glColor3f(0.698, 0.133, 0.133);
+	glLineWidth(1.5);
+	glBegin(GL_LINES);
+	glVertex3f(100, 10, 100);
+	glVertex3f(100, 10, -100);
+	glVertex3f(100, 10, -100);
+	glVertex3f(-100, 10, -100);
+	glVertex3f(-100, 10, -100);
+	glVertex3f(-100, 10, 100);
+	glVertex3f(-100, 10, 100);
+	glVertex3f(100, 10, 100);
+	glEnd();
+	glLineWidth(1);
+
+
+	glColor4f(0.647, 0.165, 0.165, 0.5);//画出透明草坪
+	glBegin(GL_POLYGON);
+	glVertex3f(0, 0, 0);
+	glVertex3f(-100, 0, 0);
+	glVertex3f(-100, 0, -100);
+	glVertex3f(0, 0, -100);
+	glEnd();
+	//glDisable(GL_BLEND);  //开启混合模式
+	glColor4f(0.271, 0.545, 0, 0.5);//画出透明深绿草坪
+	glBegin(GL_POLYGON);
+	glVertex3f(0, 0, 0);
+	glVertex3f(-100, 0, 0);
+	glVertex3f(-100, 0, 100);
+	glVertex3f(0, 0, 100);
+	glEnd();
+	glColor4f(0.333, 0.102, 0.545, 0.5);//画出透明紫色草坪
+	glBegin(GL_POLYGON);
+	glVertex3f(0, 0, 0);
+	glVertex3f(100, 0, 0);
+	glVertex3f(100, 0, 100);
+	glVertex3f(0, 0, 100);
+	glEnd();
+	glColor4f(0.545, 0.545, 0, 0.5);//画出透明紫色草坪
+	glBegin(GL_POLYGON);
+	glVertex3f(0, 0, 0);
+	glVertex3f(100, 0, 0);
+	glVertex3f(100, 0, -100);
+	glVertex3f(0, 0, -100);
+	glEnd();
+
+
+	//天气，大太阳
+	if (weatherChoose == 1)
+	{
+		glPushMatrix();
+		glTranslatef(-50, 160, 70);
+		glColor3f(1, 1, 0);
+		glutWireSphere(30, 80, 80);
+		glColor3f(1, 1, 1);
+		glutWireSphere(29, 200, 200);
+		glColor3f(1, 0.1, 0.1);
+		glutWireSphere(28, 100, 100);
+		glPopMatrix();
+	}
+	if (weatherChoose == 2)
+	{
+		glPushMatrix();
+		glTranslatef(-50, 160, 70);
+		glColor3f(1, 1, 1);
+		glutWireSphere(23, 100, 100);
+		glColor3f(0.82, 0.933, 0.933);
+		glutWireSphere(25, 90, 90);
+		glPopMatrix();
+	}
+	if (weatherChoose == 3)
+	{
+		glPushMatrix();
+		glTranslatef(-50, 160, 70);
+		glColor3f(1, 1, 1);
+		glutWireSphere(23, 100, 100);
+		glColor3f(0.82, 0.933, 0.933);
+		glutWireSphere(25, 90, 90);
+		glPopMatrix();
+
+		//下面这些事星星
+		//第一个云球
+		glPushMatrix();
+		glTranslatef(-50, 130, 70);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二个云球
+		glPushMatrix();
+		glTranslatef(-100, 130, -90);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第三个云球
+		glPushMatrix();
+		glTranslatef(90, 130, 90);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第四个云球
+		glPushMatrix();
+		glTranslatef(95, 130, -100);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(0, 0, 0.545);//蓝色星星
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第五个云球
+		glPushMatrix();
+		glTranslatef(-80, 130, 85);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第六个云球
+		glPushMatrix();
+		glTranslatef(0, 130, -30);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第七个云球
+		glPushMatrix();
+		glTranslatef(10, 130, -30);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(1, 0, 1);
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第八个云球
+		glPushMatrix();
+		glTranslatef(-50, 130, -30);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第九个云球
+		glPushMatrix();
+		glTranslatef(-50, 130, 0);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第十个云球
+		glPushMatrix();
+		glTranslatef(50, 130, 10);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第十一个云球
+		glPushMatrix();
+		glTranslatef(50, 130, -20);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第十二个云球
+		glPushMatrix();
+		glTranslatef(-10, 140, 55);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第十三个星星
+		glPushMatrix();
+		glTranslatef(70, 130, -50);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(1, 0, 1);
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第十四个星星
+		glPushMatrix();
+		glTranslatef(10, 130, -30);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(1, 0, 1);
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第十五个星星
+		glPushMatrix();
+		glTranslatef(0, 150, -10);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(0, 0, 0.545);
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第十七个星星
+		glPushMatrix();
+		glTranslatef(-50, 130, 30);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glColor3f(0, 0, 0.545);
+		glutWireSphere(1, 5, 5);
+		glPopMatrix();
+
+		//第十八个星星
+		glPushMatrix();
+		glTranslatef(-60, 130, 80);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第十九个星星
+		glPushMatrix();
+		glTranslatef(0, 135, 5);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二十个星星
+		glPushMatrix();
+		glTranslatef(-35, 120, -40);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二十一个星星
+		glPushMatrix();
+		glTranslatef(28, 130, 66);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二十二个星星
+		glPushMatrix();
+		glTranslatef(80, 135, -33);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二十三个星星
+		glPushMatrix();
+		glTranslatef(-44, 150, 70);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+		//第二十四个星星
+		glPushMatrix();
+		glTranslatef(-75, 110, -20);
+		glColor3f(1, 1, 1);
+		glutWireSphere(0.5, 10, 10);
+		glPopMatrix();
+
+	}
+	//上面是天气选择
+
+	//画出被推的箱子
+	box(boxX, boxY, boxZ, boxH, boxIn);
+	//将箱子推进下面的圈内
+	glColor3f(1, 0.843, 0);
+	glLineWidth(2.0);
+	glBegin(GL_LINES);
+	glVertex3f(50, 1, -50);
+	glVertex3f(50, 1, -70);
+
+	glVertex3f(50, 1, -70);
+	glVertex3f(70, 1, -70);
+
+	glVertex3f(70, 1, -70);
+	glVertex3f(70, 1, -50);
+
+	glVertex3f(70, 1, -50);
+	glVertex3f(50, 1, -50);
+
+	//下面是外圈
+	glVertex3f(40, 1, -40);
+	glVertex3f(40, 1, -80);
+
+	glVertex3f(40, 1, -80);
+	glVertex3f(80, 1, -80);
+
+	glVertex3f(80, 1, -80);
+	glVertex3f(80, 1, -40);
+
+	glVertex3f(80, 1, -40);
+	glVertex3f(40, 1, -40);
+	glEnd();
+	glLineWidth(1.0);
+
+
+	//画出被顶的箱子
+	changFangTiInDisplay(90, 15, -60, 15, -80, -5, -80, -5, -60,
+		                 80, 15, -60, 15, -80, -5, -80, -5, -60, 0.545, 0.271, 0, 1);
+	glBegin(GL_LINES);
+	glColor3f(0.545, 0.271, 0);
+	glVertex3f(5, 80, -70);
+	glColor3f(1, 1, 1);
+	glVertex3f(5, 0, -70);
+	glEnd();
+
+	//小红旗
+	redFlag(flagX, flagY, flagZ);
+	//主席台，在主席台内才能升旗
+	glColor3f(0.698, 0.133, 0.133);
+	glLineWidth(2.0);
+	glBegin(GL_LINE_LOOP);
+	glVertex3f(10, 1, 10);
+	glVertex3f(10, 1, -10);
+	glVertex3f(-10, 1, -10);
+	glVertex3f(-10, 1, 10);
+	glEnd();
+	glBegin(GL_LINE_LOOP);
+	glVertex3f(7, 2, 7);
+	glVertex3f(7, 2, -7);
+	glVertex3f(-7, 2, -7);
+	glVertex3f(-7, 2, 7);
+	glEnd();
+	glLineWidth(1.0);
+	//旗杆
+	glColor3f(0.827, 0.827, 0.827);
+	glLineWidth(3.0);
+	glBegin(GL_LINES);
+	glVertex3f(0, 0, 1);
+	glVertex3f(0, 167, 1);
+	glEnd();
+	glLineWidth(1.0);
+	glPushMatrix();
+	glTranslatef(0, 167, 1);
+	glutWireSphere(2, 30, 30);
+	glPopMatrix();
+
+	//下面盖几栋楼
+	buildingBuild(building1X, building1Z, building1Floor);
+	buildingBuild(building2X, building2Z, building2Floor);
+	buildingBuild(building3X, building3Z, building3Floor);
+	buildingBuild(building4X, building4Z, building4Floor);
+	buildingBuild(building5X, building5Z, building5Floor);
+	buildingBuild(building6X, building6Z, building6Floor);
+	buildingBuild(building7X, building7Z, building7Floor);
+	//----------------------------------------------------上面是背景
+
+	Done_Robot(robotX, robotY, robotZ, robotIdentity, landed);//机器人本人
+
+	glutSwapBuffers();
+}
+
+void spinCube()
+{
+	Sleep(10);
+
+	//这是游戏历史上的最简单的死亡判定
+	if (robotY <= -20 && robotIdentity == 1)
+	{
+		printf("哎呀！这一摔恐怕不行了！\n");
+	}
+
+	//走路动腿系统
+	if (walkTime > 0)
+		walkTime--;
+	else if (walkTime == 0)
+		walkTime = 100;
+
+
+	//下面是小红旗的重力系统
+	if (flagOnAir > 0)
+	{
+		if (flagOnAir == 1)//小红旗飘扬时间够了以后，就要转换到可以掉落的位置
+			flagY = 149;
+		flagOnAir--;
+	}
+
+	if (flagOnAir > 0)//小红旗处于飘扬状态，不可加速，不可移动
+	{
+		v_flagY = 0;
+		flagY = 150;
+	}
+	else//小红旗不在飘扬状态
+	{
+		flagY += v_flagY;
+		v_flagY += -gravity / 100;
+		if (flagY <= 0)//小红旗不掉进地下
+		{
+			v_flagY = 0;
+			flagY = 0;
+		}
+
+		if (flagY >= 150)//小红旗不能飞太高
+		{
+			flagOnAir = 1000; //飘扬10秒
+			flagY = 150;
+			v_flagY = 0;
+		}
+	}
+	//以上是小红旗的重力系统
+
+	//被推的箱子会掉进场地外的地方
+	if (boxX > 110 || boxX < -110 || boxZ>110 || boxZ < -110)
+	{
+		boxY += v_boxY;
+		v_boxY += -gravity / 100;
+	}
+
+	//下面是机器人的水平方向运动效果，有摩擦力模拟
+	robotX += v_robotX;
+	robotZ += v_robotZ;
+	if (v_robotX > 0)
+		v_robotX -= 0.015;
+	else if (v_robotX < 0)
+		v_robotX += 0.015;
+	if (v_robotZ > 0)
+		v_robotZ -= 0.015;
+	else if (v_robotZ)
+		v_robotZ += 0.015;
+
+	//被推的箱子也要有摩擦力模拟,摩擦力与人相同
+	boxX += v_boxX;
+	boxZ += v_boxZ;
+	if (v_boxX > 0)
+		v_boxX -= 0.015;
+	else if (v_boxX < 0)
+		v_boxX += 0.015;
+	if (v_boxZ > 0)
+		v_boxZ -= 0.015;
+	else if (v_boxZ < 0)
+		v_boxZ += 0.015;
+
+	//用来冲刺镜头缩放的，机器人总速度
+	v_robot = abs(v_robotX) + abs(v_robotY) + abs(v_robotZ);
+
+
+	if (robotIdentity == 1) //人类模式下的重力系统
+	{
+		if (landed == false)//机器人没有着地，才会受重力下降
+		{
+			robotY += v_robotY;
+			v_robotY += -gravity / 100;
+		}
+
+		if (robotY <= 0 )
+		{
+			if (robotX > 105 || robotX < -105 || robotZ>110 || robotZ < -110)
+			{
+				landed = false;
+			}
+			else
+			{
+				landed = true;
+				v_robotY = 0;
+				robotY = 0;
+			}
+		}
+	}
+	else if (robotIdentity == 2)//超人模式下的重力系统，无重力
+	{
+		robotY += v_robotY;
+		if (v_robotY > 0)
+			v_robotY -= 0.01;
+		else if (v_robotY < 0)
+			v_robotY += 0.01;
+
+		if (robotY <= 0)
+		{
+			landed = true;
+			if (robotX > 105 || robotX < -105 || robotZ>110 || robotZ < -110)
+			{
+				landed = false;
+				robotY += v_robotY;
+			}
+			else
+			{
+				landed = true;
+				v_robotY = 0;
+				robotY = 0;
+			}
+		}
+	}
+	
+
+
+
+	//下面是推箱子的内容,人与箱子的交互
+	if (robotX<boxX + 15 && robotX>boxX - 15 && robotZ<boxZ + 20 && robotZ>boxZ - 20)//摩擦力系统完美，就是心疼我的电脑
+	{
+		if (robotY >= 0 && robotY < 20)
+		{
+			if (v_robotX > 0 && robotX < boxX && boxPushX)
+			{
+				//boxX = robotX + 16;
+				v_boxX = v_robotX + 0.015;
+			}
+			else if (v_robotX < 0 && robotX > boxX && boxPushX)
+			{
+				//boxX = robotX - 16;
+				v_boxX = v_robotX - 0.015;
+			}
+
+			else if (v_robotZ > 0 && robotZ < boxZ && !boxPushX)
+			{
+				//boxZ = robotZ + 21;
+				v_boxZ = v_robotZ + 0.015;
+			}
+			else if (v_robotZ < 0 && robotZ > boxZ && !boxPushX)
+			{
+				//boxZ = robotZ - 21;
+				v_boxZ = v_robotZ - 0.015;
+			}
+		}
+		if (robotY >= 20 && robotY <= 36)//比箱子高的地方会站在箱子上
+		{
+			landed = true;
+			robotY = 36;
+
+			if (v_robotY < 0)
+				v_robotY = 0;
+		}
+
+	}
+	else  if (robotY>=36)//在箱子范围外
+	{
+		landed = false;
+	}
+
+	//下面是能量球与箱子的交互,这能量球衰减的可真快
+	if (powerBallExist>0)
+		if ((powerBallX > boxX - 20)&&(powerBallX<boxX+20))
+			if ((powerBallZ < boxZ + 20) && (powerBallZ > boxZ - 20))
+				if ((powerBallY < boxY + 46)&&(powerBallY>boxY-10))
+				{
+					boxWasAttacked = 30;//0.3秒为红色
+					powerBallExist = 0;
+					v_boxX = 0.75;
+				}
+	
+
+	if (powerBallExist2>0)
+		if ((powerBallX2 > boxX - 20) && (powerBallX2<boxX + 20))
+			if ((powerBallZ2 < boxZ + 20) && (powerBallZ2 > boxZ - 20))
+				if ((powerBallY2 < boxY + 46) && (powerBallY2>boxY - 10))
+				{
+					boxWasAttacked = 30;
+					powerBallExist2 = 0;
+					v_boxX = 0.75;
+				}
+	//------------------------------------------????
+
+	if (robotX<15 && robotX>-5 && robotZ<-60 && robotZ>-80)//在悬浮砖块的范围内
+	{
+		if (robotY >= 20 && robotY < 70)
+		{
+			v_robotY = -abs(v_robotY);
+			if (weatherChoose == 1)
+				weatherChoose = 2;
+			else if (weatherChoose == 2)
+				weatherChoose = 3;
+			else if (weatherChoose == 3)
+				weatherChoose = 1;
+		}
+		else if (robotY>=70 && robotY<=90)
+		{
+			landed = true;
+			v_robotY = 0;
+			robotY = 90;
+		}
+	}
+	else if (robotY>=90)
+	{
+		landed = false;
+	}
+
+	//上面是悬浮块的内容
+
+	//-----------------------------------------------以下为特效用
+	theta += 0.1;
+	if (theta >= 2 * PI) theta -= 2 * PI;
+
+	if (boxWasAttacked > 0)
+		boxWasAttacked--;
+
+	if (lazerEyeTime > 0)
+		lazerEyeTime--;
+
+	if (shield > 0)//能量盾，每0.01秒减少一点能量，每100持续1秒
+		shield--;
+
+	if (thunderJump>0)//雷霆跳，每0.01秒减少一点能量，每100持续1秒
+		thunderJump--;
+
+	if (powerBallExist > 0)//能量球存在时间
+	{
+		powerBallExist--;
+		//独特的特效，受到重力影响的能量球
+		//受到微弱的重力
+		powerBallY += v_powerBallY;
+		v_powerBallY += -gravity / 500;
+	}
+
+	if (powerBallExist2 > 0)//能量球2存在时间
+	{
+		powerBallExist2--;
+		//独特的特效，受到重力影响的能量球
+		powerBallY2 += v_powerBallY2;
+		v_powerBallY2 += -gravity / 500;
+	}
+
+	powerBallX += v_powerBallX;
+	powerBallX2 += v_powerBallX2;
+
+	if (thunderColor == 1) //雷霆跳的特效实现，变色
+	{
+		glColor3f(0.294, 0, 0.51);
+		thunderColor++;
+	}
+	else if (thunderColor == 2)
+	{
+		glColor3f(0.278, 0.235, 0.545);
+		thunderColor++;
+	}
+	else if (thunderColor == 3)
+	{
+		glColor3f(0.153, 0.251, 0.545);
+		thunderColor++;
+	}
+	else if (thunderColor == 4)
+	{
+		glColor3f(0.098, 0.098, 0.439);
+		thunderColor++;
+	}
+	else if (thunderColor == 5)
+	{
+		glColor3f(0, 0, 0.804);
+		thunderColor++;
+	}
+	else if (thunderColor == 6)
+	{
+		glColor3f(0, 0, 0.502);
+		thunderColor++;
+	}
+	else if (thunderColor == 7)
+	{
+		glColor3f(1, 0, 0);
+		thunderColor++;
+	}
+	else if (thunderColor == 8)
+	{
+		glColor3f(1, 1, 0);
+		thunderColor++;
+	}
+	else if (thunderColor == 9)
+	{
+		glColor3f(0, 1, 1);
+		thunderColor=1;
+	}
+
+	//推箱子的变色也算特效吧
+	if (boxX < 70 && boxX>50 && boxZ<-50 && boxZ>-70)
+		boxIn = 1;
+	else
+		boxIn = 0;
+
+	//---------------------------------以上为特效用
+	glutPostRedisplay();
+}
+
+void mouse(int btn, int state, int x, int y)
+{
+
+	if (btn == GLUT_LEFT_BUTTON &&state == GLUT_DOWN) weatherChoose = 1;
+	if (btn == GLUT_MIDDLE_BUTTON&&state == GLUT_DOWN) weatherChoose = 3;
+	if (btn == GLUT_RIGHT_BUTTON&&state == GLUT_DOWN) weatherChoose = 2;
+}
+void mykeyboard(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	//以下的 qwe asd及其大写字母用来，确定观察者的位置
+	case 'W':
+	case 'w': 
+	{
+		cameraY += 0.5; 
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break; 
+	}
+	case 'S':
+	case 's':
+	{
+		cameraY -= 0.5; 
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break; 
+	}
+	case 'A':
+	case 'a':
+	{
+		cameraZ += 0.5; 
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'D':
+	case 'd':
+	{
+		cameraZ -= 0.5;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break; 
+	}
+	case 'Q':
+	case 'q':
+	{
+		cameraX += 1;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'E':
+	case 'e':
+	{
+		cameraX -= 1;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	//以下的rty fgh及其大写字母用来，确定被观察的中心位置
+	case 'T':
+	case 't':
+	{
+		lookAimX -= 1; 
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break; 
+	}
+	case 'G':
+	case 'g':
+	{
+		lookAimX += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'F':
+	case 'f':
+	{
+		lookAimZ += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'H':
+	case 'h':
+	{
+		lookAimZ -= 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'Y':
+	case 'y':
+	{
+		lookAimY += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'R':
+	case 'r':
+	{
+		lookAimY -= 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	//以下的ijkl 及其大写字母，控制机器人的上下左右
+	case 'I':
+	case 'i':
+	{
+		boxPushX = 1;//箱子会被X方向移动
+		v_robotX -= 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'K':
+	case 'k':
+	{
+		boxPushX = 1;
+		v_robotX += 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'J':
+	case 'j':
+	{
+		boxPushX = 0;//箱子不会被X方向移动
+		v_robotZ += 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'L':
+	case 'l':
+	{
+		boxPushX = 0;
+		v_robotZ -= 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	// U u 都是机器人的跳跃键，是超人的向上飞行键
+	case 'U':
+	case 'u':
+	{
+		landed = false;
+		if (robotIdentity == 1)//人类模式才是跳跃
+		{
+			if (thunderJump > 0)
+			{
+				v_robotY = 6;
+			}
+			else
+			{
+				v_robotY = 3;
+			}
+		}
+		else if (robotIdentity == 2)//超人模式直接飞
+		{
+			if (thunderJump > 0)
+			{
+				v_robotY += 0.2;
+			}
+			else
+			{
+				v_robotY += 0.1;
+			}
+			
+		}
+		break;
+	}
+	//雷霆跳技能的开始键
+	case 'O':
+	case 'o':
+	{
+		thunderJump = 300;
+		break;
+	}
+	//变身键，普通人变超人，超人变普通人
+	case 'P':
+	case 'p':
+	{
+		if (robotIdentity == 1)
+		{
+			robotIdentity = 2;
+			thunderJump = 100;
+			shield = 100;
+			v_robotY = 0;
+		}
+		else
+			robotIdentity = 1;
+		break;
+	}
+	//超人模式的向下飞行键
+	case 'N':
+	case 'n':
+	{
+		if (robotIdentity == 2)
+			v_robotY -= 0.1;
+		break;
+	}
+	//超人模式的能量盾
+	case 'M':
+	case 'm':
+	{
+		if (robotIdentity == 2)
+			shield = 400;
+		break;
+	}
+	//超人模式的透视眼
+	case 'B':
+	case 'b':
+	{
+		if (robotIdentity == 2)
+		{
+			if (superEye == false)
+				superEye = true;
+			else
+				superEye = false;
+		}
+
+		break;
+	}
+	case 'V':
+	case 'v':
+	{
+		lazerEyeTime = 50;
+		break;
+	}
+	case 'X':
+	case 'x':
+	{
+		if (robotX<15 && robotX>-15 && robotZ > -20 && robotZ < 20 && landed)
+		{
+            v_flagY += 3;
+		}
+		break;
+	}
+	case 'C':
+	case 'c':
+	{
+		if (robotIdentity==2)
+		{
+			if (numPowerBall == 1)//发射能量球，能量球2做准备
+			{
+				powerBallExist = 500;
+				v_powerBallX = 4;
+				v_powerBallY = 0;
+				powerBallX = robotX;
+				powerBallY = robotY;
+				powerBallZ = robotZ;
+				numPowerBall = 2;
+			}
+			else//发射能量球2，能量球做准备
+			{
+				powerBallExist2 = 500;
+				v_powerBallX2 = 4;
+				v_powerBallY2 = 0;
+				powerBallX2 = robotX;
+				powerBallY2 = robotY;
+				powerBallZ2 = robotZ;
+				numPowerBall = 1;
+			}
+		}
+		break;
+	}
+	case 'Z':
+	case 'z':
+	{
+		boxX = -50;
+		boxY = 0;
+		boxZ = 50;
+		v_boxY = 0;
+		
+		robotX = 5;
+		robotY = 0;
+		robotZ = 90;
+		break;
+	}
+
+	}
+}
+int main(int argc, char** argv)
+{
+	int inOfYou;
+	int inOfYou2;
+	menu1();
+	scanf("%d", &inOfYou);
+	if (inOfYou == 2)
+		return 1;
+	else
+	{
+		menu2();
+		scanf("%d", &inOfYou2);
+		if (inOfYou2 == 2)
+		{
+			return 2;
+		}
+		else
+		{
+			glutInit(&argc, argv);
+			glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+			glutInitWindowSize(800, 800);
+			glutInitWindowPosition(100, 20);
+			glutCreateWindow("HY大冒险v8.1.3,MADE BY 张翌庸20162430833 卓越一班 信息工程学院 ZZU");
+
+			init();
+			glutReshapeFunc(reshape);
+			glutDisplayFunc(display);
+			glutIdleFunc(spinCube);
+			glutMouseFunc(mouse);
+			glutKeyboardFunc(mykeyboard);
+			glutMainLoop();
+		}
+	}
+	return 0;
+}

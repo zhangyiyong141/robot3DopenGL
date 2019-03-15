@@ -1,0 +1,832 @@
+#include<glut.h>
+#include<stdio.h>
+#include<Windows.h>
+#include<math.h>
+# define PI 3.1415926
+
+int thunderColor = 1;//雷霆变色计数器
+int thunderJump = 0;
+
+
+double tempWalk;
+
+//具体画圆方法，和画正多边形方法，可以在网上查找，都是基于sin和cos的数学运算
+double R = 20;
+double R2 = 2.5;
+int n = 6;//六边形
+int n2 = 100;//圆圈
+
+bool superEye = false;//超级眼
+					  //以上为雷霆跳的特效全局变量
+
+bool landed = true;
+
+//修改这个数值为1，可以感受到重力。但是我取消了变身按键P
+int robotIdentity = 2;
+//robotIdentity，1为普通人，2为超人
+
+double robotX = 0;
+double robotY = 0;
+double robotZ = 0;
+
+double v_robot = 0;
+double v_robotY = 0;
+double v_robotX = 0;
+double v_robotZ = 0;
+double gravity = 9.8;//重力加速度
+
+
+//摄像机位置
+double cameraX = 100;
+double cameraY = 45;
+double cameraZ = 16;
+//被观测中心
+//目前的这个镜头位置比较合适
+double lookAimX = 55;
+double lookAimY = 0;//这个高度不变
+double lookAimZ = 3;
+
+
+int weatherChoose = 1;// 1是太阳，2是月亮
+
+double theta = 0;//并不是角度制,本来以为没有用结果用上了，sin和cos的一圈是 6.28 rads
+int flag = 0;
+//------------------------------
+//这里面是建筑群，高楼长20，宽20，每层高5
+double building1X = -150;
+double building1Z = 50;
+double building1Floor = 30;//30层高
+
+
+//------------------------------
+
+
+
+
+//用到的函数一览↓
+
+void Done_Robot(double firstX, double firstY, double firstZ, int identity, bool onLand);
+
+void buildingBuild(double BX, double BZ, int floorN);
+void init();
+void reshape(int w, int h);
+void changFangTiInDisplay
+(
+	double upy, double up1x, double up1z, double up2x, double up2z, double up3x, double up3z, double up4x, double up4z,
+	double downy, double down1x, double down1z, double down2x, double down2z, double down3x, double down3z, double down4x, double down4z,
+	double R, double G, double B, double ALPHA
+);
+void display();
+void spinCube();
+void mouse(int btn, int state, int x, int y);
+void mykeyboard(unsigned char key, int x, int y);
+//用到的函数一览↑
+
+
+//Robot主体，robot的身体在这里写，最后再display()里面调用即可
+void Done_Robot(double firstX, double firstY, double firstZ, int identity, bool onLand)
+{
+	glColor3f(1, 1, 1);
+	// 阴影，用来确定超人的位置, 阴影崩了，直接换个锁定位置吧
+	if (firstX <= 100 && firstX >= -100 && firstZ <= 100 && firstZ >= -100)
+	{
+		glVertex4f(0.1, 0.1, 0.1, 0.1);
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(firstX + R2*cos(2 * PI*i / n2), 1, firstZ + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX>100 || firstX<-100) && (firstZ>100 || firstZ<-100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(((firstX>100) ? 100 : -100) + R2*cos(2 * PI*i / n2), 1, ((firstZ>100) ? 100 : -100) + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX > 100 || firstX < -100) && (firstZ <= 100 && firstZ >= -100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(((firstX>100) ? 100 : -100) + R2*cos(2 * PI*i / n2), 1, firstZ + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+	else if ((firstX <= 100 && firstX >= -100) && (firstZ > 100 || firstZ < -100))
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int i = 0; i < n2; i++)
+		{
+			glVertex3f(firstX + R2*cos(2 * PI*i / n2), 1, ((firstZ>100) ? 100 : -100) + R2*sin(2 * PI*i / n2));   //定义顶点
+		}
+		glEnd();
+	}
+
+
+	//机器人示意头
+	glColor3f(1, 0.714, 0.757);
+	glPushMatrix();
+	glTranslatef(firstX, firstY + 50, firstZ);
+	glutWireSphere(10, 20, 20);
+	glPopMatrix();
+
+	//机器人示意十字架
+	glColor3f(0, 1, 1);
+	glLineWidth(3.0);
+	glBegin(GL_LINES);
+	glVertex3f(firstX, firstY + 1, firstZ);
+	glVertex3f(firstX, firstY + 50, firstZ);
+	glVertex3f(firstX + 15, firstY + 30, firstZ);
+	glVertex3f(firstX - 15, firstY + 30, firstZ);
+	glVertex3f(firstX, firstY + 30, firstZ + 15);
+	glVertex3f(firstX, firstY + 30, firstZ - 15);
+	glEnd();
+
+}
+
+
+void buildingBuild(double BX, double BZ, int floorN)
+{
+	double tempY = 0;
+	for (; floorN > 0; floorN--)
+	{
+		changFangTiInDisplay(tempY + 5, BX + 10, BZ + 10, BX + 10, BZ - 10, BX - 10, BZ - 10, BX - 10, BZ + 10,
+			tempY, BX + 10, BZ + 10, BX + 10, BZ - 10, BX - 10, BZ - 10, BX - 10, BZ + 10, 0.753, 0.753, 0.753, 1);
+		tempY += 5;
+	}
+}
+
+
+void init()
+{
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	glEnable(GL_DEPTH_TEST);
+	glLineWidth(3);
+}
+
+void reshape(int w, int h)
+{
+	glViewport(0, 0, w, h);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	if (w <= h)
+		glOrtho(-200, 200, -200 * (GLfloat)h / (GLfloat)w, 200 * (GLfloat)h / (GLfloat)w, -600, 600);
+	else
+		glOrtho(200 * (GLfloat)h / (GLfloat)w, 200 * (GLfloat)h / (GLfloat)w, -200.0, 200.0, -600, 600);
+
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+void changFangTiInDisplay//自定义的长方体画法
+(
+	double upy, double up1x, double up1z, double up2x, double up2z, double up3x, double up3z, double up4x, double up4z,
+	double downy, double down1x, double down1z, double down2x, double down2z, double down3x, double down3z, double down4x, double down4z,
+	double R, double G, double B, double ALPHA
+)
+{
+	glColor4f(R, G, B, ALPHA);
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down1x, downy, down1z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down3x, downy, down3z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down1x, downy, down1z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	glEnd();
+
+	glBegin(GL_POLYGON);
+	glVertex3f(down1x, downy, down1z);
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	glVertex3f(down4x, downy, down4z);
+	glEnd();
+
+	glColor3f(1, 1, 1);
+	glLineWidth(1.0);
+	glBegin(GL_LINES);
+	// 1
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(up2x, upy, up2z);
+	//2
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(up3x, upy, up3z);
+	//3
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(up4x, upy, up4z);
+	//4
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(up1x, upy, up1z);
+	//5
+	glVertex3f(down1x, downy, down1z);
+	glVertex3f(down2x, downy, down2z);
+	//6
+	glVertex3f(down2x, downy, down2z);
+	glVertex3f(down3x, downy, down3z);
+	//7
+	glVertex3f(down3x, downy, down3z);
+	glVertex3f(down4x, downy, down4z);
+	//8
+	glVertex3f(down4x, downy, down4z);
+	glVertex3f(down1x, downy, down1z);
+	//9
+	glVertex3f(up1x, upy, up1z);
+	glVertex3f(down1x, downy, down1z);
+	//10
+	glVertex3f(up2x, upy, up2z);
+	glVertex3f(down2x, downy, down2z);
+	//11
+	glVertex3f(up3x, upy, up3z);
+	glVertex3f(down3x, downy, down3z);
+	//12
+	glVertex3f(up4x, upy, up4z);
+	glVertex3f(down4x, downy, down4z);
+	glEnd();
+}
+
+void display()
+{
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	//超人拥有主角镜头，而人类没有
+	if (robotIdentity == 1)
+		gluLookAt(cameraX, cameraY, cameraZ, lookAimX, lookAimY, lookAimZ, 0, 1, 0);
+	else
+		gluLookAt(cameraX + 0.9*robotX, cameraY + 0.9*robotY + 5 * v_robot, cameraZ + 0.9*robotZ + 2 * v_robot, 55 + robotX, robotY, 3 + robotZ, 0, 1, 0);
+
+	if (thunderJump > 0)//好了，魔法盘会旋转了
+	{
+		glBegin(GL_POLYGON);
+		for (int i = 0; i < n; i++)
+			glVertex3f(robotX + R*cos(-0.5*theta + i * 2 * PI / n), robotY + 1, robotZ + R*sin(-0.5*theta + i * 2 * PI / n));
+		glEnd();
+
+		glLineWidth(0.8);
+		glBegin(GL_LINE_LOOP);
+		for (int i = 0; i < n2; i++)
+			glVertex3f(robotX + R*cos(i * 2 * PI / n2), robotY + 1, robotZ + R*sin(i * 2 * PI / n2));
+		glEnd();
+	}
+
+	//按B实现透视效果
+	if (superEye == true && robotIdentity == 2)
+	{
+		glEnable(GL_BLEND);  //开启混合模式
+		glDisable(GL_DEPTH_TEST);  //关闭深度测试
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);//这三个为透视模式
+										  //上面是透视
+
+	}
+	else
+	{
+		glDisable(GL_BLEND);
+		glEnable(GL_DEPTH_TEST);
+		//上面是关闭透视特效
+
+	}
+
+
+	//这里做冰火旋绕球,身份2为超人模式
+	if (robotIdentity == 2)
+	{
+		//n=2, i=1 i=0
+		//火球
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta), robotY, robotZ + 0.5*R*sin(theta));
+		glColor3f(0.78, 0.083, 0.522);
+		glutWireSphere(4, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(3, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta - 0.5) - 4 * v_robotX, robotY - 3 * v_robotY, robotZ + 0.5*R*sin(theta - 0.5) - 4 * v_robotZ);
+		glColor3f(0.78, 0.083, 0.522);
+		glutWireSphere(2, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(1, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta - 1) - 11 * v_robotX, robotY - 6 * v_robotY, robotZ + 0.5*R*sin(theta - 1) - 11 * v_robotZ);
+		glColor3f(0.78, 0.083, 0.522);
+		glutSolidSphere(1, 3, 3);
+		glPopMatrix();
+
+		//冰球
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta + PI), robotY, robotZ + 0.5*R*sin(theta + PI));
+		glColor3f(0.686, 0.933, 0.933);
+		glutWireSphere(4, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(3, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta + PI - 0.5) - 4 * v_robotX, robotY - 3 * v_robotY, robotZ + 0.5*R*sin(theta + PI - 0.5) - 4 * v_robotZ);
+		glColor3f(0.686, 0.933, 0.933);
+		glutWireSphere(2, 5, 5);
+		glColor3f(1, 1, 1);
+		glutSolidSphere(1, 5, 5);
+		glPopMatrix();
+
+		glPushMatrix();
+		glTranslatef(robotX + 0.5*R*cos(theta + PI - 1) - 11 * v_robotX, robotY - 6 * v_robotY, robotZ + 0.5*R*sin(theta + PI - 1) - 11 * v_robotZ);
+		glColor3f(0.686, 0.933, 0.933);
+		glutSolidSphere(1, 3, 3);
+		glPopMatrix();
+
+	}
+
+
+
+
+	//----------------------------------------------------上面是特效
+
+	//----------------------------------------------------下面是背景
+
+
+	//下面是一个三维坐标系
+	glColor3f(1.0, 0.0, 0.0);//亮红色X轴
+	glBegin(GL_LINES);
+	glVertex3f(-200.0, -1, 0.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(200.0, -1, 0.0);
+	glEnd();
+
+	glColor3f(0.0, 1.0, 0.0);//亮绿色Y轴
+	glBegin(GL_LINES);
+	glVertex3f(0.0, -200, 0.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(0.0, 200, 0.0);
+	glEnd();
+
+	glColor3f(0.0, 0.0, 1.0);//亮蓝色Z轴
+	glBegin(GL_LINES);
+	glVertex3f(0.0, -1, -200.0);
+	glColor3f(1, 1, 1);
+	glVertex3f(0.0, -1, 200.0);
+	glEnd();
+
+
+	//草坪围栏
+	glColor3f(1, 0.498, 0.141);
+	glLineWidth(1.5);
+	glBegin(GL_LINES);
+	glVertex3f(160, 0, 160);
+	glVertex3f(160, 0, -160);
+	glVertex3f(160, 0, -160);
+	glVertex3f(-160, 0, -160);
+	glVertex3f(-160, 0, -160);
+	glVertex3f(-160, 0, 160);
+	glVertex3f(-160, 0, 160);
+	glVertex3f(160, 0, 160);
+	glEnd();
+	glLineWidth(1);
+
+
+	glColor4f(0.333, 0.102, 0.545, 0.5);//画出透明紫色草坪
+	glBegin(GL_POLYGON);
+	glVertex3f(-100, 0, -100);
+	glVertex3f(-100, 0, 100);
+	glVertex3f(100, 0, 100);
+	glVertex3f(100, 0, -100);
+	glEnd();
+
+
+	//下面盖几栋楼
+	//buildingBuild(building1X, building1Z, building1Floor);
+
+	//----------------------------------------------------上面是背景
+
+	Done_Robot(robotX, robotY, robotZ, robotIdentity, landed);//机器人本人
+
+	glutSwapBuffers();
+}
+
+void spinCube()
+{
+	Sleep(10);
+
+	//这是游戏历史上的最简单的死亡判定
+	if (robotY <= -20 && robotIdentity == 1)
+	{
+		printf("哎呀！这一摔恐怕不行了！\n");
+	}
+
+
+	//下面是机器人的水平方向运动效果，有摩擦力模拟
+	robotX += v_robotX;
+	robotZ += v_robotZ;
+	if (v_robotX > 0)
+		v_robotX -= 0.015;
+	else if (v_robotX < 0)
+		v_robotX += 0.015;
+	if (v_robotZ > 0)
+		v_robotZ -= 0.015;
+	else if (v_robotZ)
+		v_robotZ += 0.015;
+
+
+	//用来冲刺镜头缩放的，机器人总速度，用来跟踪超人视角的润滑延迟
+	v_robot = abs(v_robotX) + abs(v_robotY) + abs(v_robotZ);
+
+
+	if (robotIdentity == 1) //人类模式下的重力系统
+	{
+		if (landed == false)//机器人没有着地，才会受重力下降
+		{
+			robotY += v_robotY;
+			v_robotY += -gravity / 100;
+		}
+
+		if (robotY <= 0)
+		{
+			if (robotX > 100 || robotX < -100 || robotZ>100 || robotZ < -100)
+			{
+				landed = false;
+			}
+			else
+			{
+				landed = true;
+				v_robotY = 0;
+				robotY = 0;
+			}
+		}
+	}
+	else if (robotIdentity == 2)//超人模式下的重力系统，无重力
+	{
+		robotY += v_robotY;
+		if (v_robotY > 0)
+			v_robotY -= 0.01;
+		else if (v_robotY < 0)
+			v_robotY += 0.01;
+
+		if (robotY <= 0)
+		{
+			landed = true;
+			if (robotX > 105 || robotX < -105 || robotZ>110 || robotZ < -110)
+			{
+				landed = false;
+				robotY += v_robotY;
+			}
+			else
+			{
+				landed = true;
+				v_robotY = 0;
+				robotY = 0;
+			}
+		}
+	}
+
+
+	//-----------------------------------------------以下为特效用
+	theta += 0.1;
+	if (theta >= 2 * PI) theta -= 2 * PI;
+
+	if (thunderJump>0)//雷霆跳，每0.01秒减少一点能量，每100持续1秒
+		thunderJump--;
+
+
+	if (thunderColor == 1) //雷霆跳的特效实现，变色
+	{
+		glColor3f(0.294, 0, 0.51);
+		thunderColor++;
+	}
+	else if (thunderColor == 2)
+	{
+		glColor3f(0.278, 0.235, 0.545);
+		thunderColor++;
+	}
+	else if (thunderColor == 3)
+	{
+		glColor3f(0.153, 0.251, 0.545);
+		thunderColor++;
+	}
+	else if (thunderColor == 4)
+	{
+		glColor3f(0.098, 0.098, 0.439);
+		thunderColor++;
+	}
+	else if (thunderColor == 5)
+	{
+		glColor3f(0, 0, 0.804);
+		thunderColor++;
+	}
+	else if (thunderColor == 6)
+	{
+		glColor3f(0, 0, 0.502);
+		thunderColor++;
+	}
+	else if (thunderColor == 7)
+	{
+		glColor3f(1, 0, 0);
+		thunderColor++;
+	}
+	else if (thunderColor == 8)
+	{
+		glColor3f(1, 1, 0);
+		thunderColor++;
+	}
+	else if (thunderColor == 9)
+	{
+		glColor3f(0, 1, 1);
+		thunderColor = 1;
+	}
+
+
+	//---------------------------------以上为特效用
+	glutPostRedisplay();
+}
+
+void mouse(int btn, int state, int x, int y)
+{
+	//已经取消天气改变了，但是保留了鼠标三个按键的操作调用
+	if (btn == GLUT_LEFT_BUTTON &&state == GLUT_DOWN) weatherChoose = 1;
+	if (btn == GLUT_MIDDLE_BUTTON&&state == GLUT_DOWN) weatherChoose = 3;
+	if (btn == GLUT_RIGHT_BUTTON&&state == GLUT_DOWN) weatherChoose = 2;
+}
+void mykeyboard(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+		//以下的 qwe asd及其大写字母用来，确定观察者的位置
+	case 'W':
+	case 'w':
+	{
+		cameraY += 0.5;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'S':
+	case 's':
+	{
+		cameraY -= 0.5;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'A':
+	case 'a':
+	{
+		cameraZ += 0.5;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'D':
+	case 'd':
+	{
+		cameraZ -= 0.5;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'Q':
+	case 'q':
+	{
+		cameraX += 1;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	case 'E':
+	case 'e':
+	{
+		cameraX -= 1;
+		printf("cameraXYZ (%f, %f, %f) \n", cameraX, cameraY, cameraZ);
+		break;
+	}
+	//以下的rty fgh及其大写字母用来，确定被观察的中心位置
+	case 'T':
+	case 't':
+	{
+		lookAimX -= 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'G':
+	case 'g':
+	{
+		lookAimX += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'F':
+	case 'f':
+	{
+		lookAimZ += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'H':
+	case 'h':
+	{
+		lookAimZ -= 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'Y':
+	case 'y':
+	{
+		lookAimY += 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	case 'R':
+	case 'r':
+	{
+		lookAimY -= 1;
+		printf("center(x, y, z) (%f, %f, %f) \n", lookAimX, lookAimY, lookAimZ);
+		break;
+	}
+	//以下的ijkl 及其大写字母，控制机器人的上下左右
+	case 'I':
+	case 'i':
+	{
+
+		v_robotX -= 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'K':
+	case 'k':
+	{
+
+		v_robotX += 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'J':
+	case 'j':
+	{
+		v_robotZ += 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	case 'L':
+	case 'l':
+	{
+		v_robotZ -= 0.1;
+		printf("robotX = %f, robotY = %f, robotZ = %f \n", robotX, robotY, robotZ);
+		break;
+	}
+	//超人变身
+	case 'P':
+	case 'p':
+	{
+		if (robotIdentity == 1)
+			robotIdentity = 2;
+		else
+			robotIdentity = 1;
+		break;
+	}
+	// U u 都是机器人的跳跃键，是超人的向上飞行键
+	case 'U':
+	case 'u':
+	{
+		landed = false;
+		if (robotIdentity == 1)//人类模式才是跳跃
+		{
+			if (thunderJump > 0)
+			{
+				v_robotY = 6;
+			}
+			else
+			{
+				v_robotY = 3;
+			}
+		}
+		else if (robotIdentity == 2)//超人模式直接飞
+		{
+			if (thunderJump > 0)
+			{
+				v_robotY += 0.2;
+			}
+			else
+			{
+				v_robotY += 0.1;
+			}
+
+		}
+		break;
+	}
+	//雷霆跳技能的开始键
+	case 'O':
+	case 'o':
+	{
+		thunderJump = 300;
+		break;
+	}
+
+	//超人模式的向下飞行键
+	case 'N':
+	case 'n':
+	{
+		if (robotIdentity == 2)
+			v_robotY -= 0.1;
+		break;
+	}
+
+	//超人模式的透视眼
+	case 'B':
+	case 'b':
+	{
+		if (robotIdentity == 2)
+		{
+			if (superEye == false)
+				superEye = true;
+			else
+				superEye = false;
+		}
+
+		break;
+	}
+
+
+	case 'Z':
+	case 'z':
+	{
+
+
+		robotX = 5;
+		robotY = 0;
+		robotZ = 90;
+		break;
+	}
+
+	}
+}
+int main(int argc, char** argv)
+{
+	printf("\n\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
+	printf("开始前请阅读操作说明：\n\n");
+	printf("下面介绍几个（共29个）简单的操作键：\n\n");
+	printf("qwe  QWE\n");
+	printf("asd  ASD  这几个键用来控制观察者的位置。\n\n");
+	printf("rty  RTY\n");
+	printf("fgh  FGH  这几个键用来控制被观察的位置。\n\n");
+	printf(" z 和 Z 是重置人物的位置。\n\n");
+	printf(" i    I\n");
+	printf("jkl  JKL  这几个键用来控制人物的水平移动。\n\n");
+	printf(" u 和 U 是跳跃键，在超人模式下是上升键，因为超人是不受重力影响的。\n\n");
+	printf(" o 和 O 是技能雷霆跳，开启此功能，可使人物的跳跃力大幅增强。\n\n");
+	printf(" n 和 N 是下降键，在超人模式下，可降低人物高度。\n\n");
+	printf(" b 和 B 是透视眼，在超人模式下，可开启。\n\n");
+	printf(" p 和 P 是变身！！");
+	printf("input 1 to start:");
+	int yesget = 0;
+	scanf("%d", &yesget);
+	if (yesget == 1)
+	{
+		//-------------------------------下面是OpenGL的调用函数
+		glutInit(&argc, argv);
+		glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+		glutInitWindowSize(800, 800);
+		glutInitWindowPosition(100, 20);
+		glutCreateWindow("robot Framework");
+
+		init();
+		glutReshapeFunc(reshape);
+
+		glutDisplayFunc(display);
+		glutIdleFunc(spinCube);
+
+		glutMouseFunc(mouse);
+		glutKeyboardFunc(mykeyboard);
+		glutMainLoop();
+		//-------------------------------上面是OpenGL的调用函数
+	}
+	return 0;
+}
